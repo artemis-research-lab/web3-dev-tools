@@ -2,6 +2,7 @@
 
 ## Purpose
 Maintain one versioned, checksummed bundle (`src/`) of the scaffold script, Skill packer and templates that new Web3 projects consume by pinned release tag; it does not hold project code.
+`skills/new-project` is a Claude Code local skill outside `src/` (not in the manifest) whose `bootstrap.ps1` downloads a pinned bundle into an empty directory, verifies it against the pinned manifest hash and runs `init.ps1` there.
 
 ## Modules
 ### Scaffold

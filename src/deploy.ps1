@@ -20,7 +20,7 @@ $ALLOW_DIRS  = [ordered]@{
   'config'     = @('.json')
 }
 # hard deny list: applies to every path segment, even inside allowed directories
-$DENY = @('.env*', '*.key', '*.pem', '*secret*', '*credential*', '*.pyc', '__pycache__', '.git*')
+$DENY = @('.env*','*.key','*.pem','*secret*','*credential*','*.pyc','__pycache__','.git*','*apikey*','*api_key*','*api-key*','*password*','*passwd*','*private_key*','*privatekey*','*mnemonic*','*keystore*','*access_token*','*auth_token*','*.p12','*.pfx','id_rsa*')
 
 function Test-Denied([string]$rel) {
   foreach ($seg in ($rel -split '[\\/]')) {

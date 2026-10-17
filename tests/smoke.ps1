@@ -204,6 +204,26 @@ Assert "S6" "scaffold deploy.ps1 -ClaudeAi exit 0 (got $script:packerRc)" ($scri
 $null = Test-ZipExact "S6" (Join-Path $d1 "dist\demo-local.zip") @("SKILL.md", "lib/__init__.py", "lib/clients/__init__.py", "references/runtime.md")
 $st = & git -C $d1 status --porcelain
 Assert "S6" "scaffold status still clean after packing" ([string]::IsNullOrEmpty(($st -join "")))
+
+# S8: extended hard deny list (credential-like names inside allowed dirs); token lists still ship
+Write-Host "CHECK S8 packer: extended deny list"
+$fx8 = Join-Path $smoke "pack-fixture-s8"
+$ship8 = $ship + @("data\token_list.json", "config\tokens.json")
+Write-Text (Join-Path $fx8 "SKILL.md") "---`nname: pack-fixture-s8`ndescription: smoke fixture`n---`n"
+foreach ($s in $ship8) { if ($s -ne "SKILL.md") { Write-Text (Join-Path $fx8 $s) "{}`n" } }
+$decoys8 = @("config\api_key.json", "data\password.txt", "lib\private_key_helper.py", "config\mnemonic.json", "data\auth_token.json")
+foreach ($d in ($decoys + $decoys8)) { Write-Text (Join-Path $fx8 $d) "DECOY`n" }
+Copy-Item -LiteralPath (Join-Path $src "deploy.ps1") -Destination (Join-Path $fx8 "tools\deploy.ps1")
+$out = Invoke-Packer $fx8
+Assert "S8" "deploy.ps1 -ClaudeAi exit 0 (got $script:packerRc)" ($script:packerRc -eq 0)
+$names = Test-ZipExact "S8" (Join-Path $fx8 "dist\pack-fixture-s8.zip") ($ship8 | ForEach-Object { $_.Replace('\', '/') })
+foreach ($t in @("data/token_list.json", "config/tokens.json")) { Assert "S8" "ships legitimate $t" ($names -contains $t) }
+foreach ($d in $decoys8) {
+  $dz = $d.Replace('\', '/')
+  Assert "S8" "excludes decoy $dz" (-not ($names -contains $dz))
+  Assert "S8" "output lists DENIED $dz" (@($out | Where-Object { $_.Trim() -eq "DENIED $dz" }).Count -eq 1)
+}
+
 # check 5: manifest
 Write-Host "CHECK 5 manifest"
 $rc = Invoke-Script "powershell" (Join-Path $repo "scripts\release.ps1") @()
@@ -231,6 +251,113 @@ $th = (Get-FileHash -LiteralPath $tamper -Algorithm SHA256).Hash.ToLowerInvarian
 Assert "5" "manifest has an init.ps1 entry" ($manifest.ContainsKey("init.ps1"))
 Assert "5" "untampered init.ps1 matches its entry" ((Get-FileHash -LiteralPath $init -Algorithm SHA256).Hash.ToLowerInvariant() -eq $manifest["init.ps1"])
 Assert "5" "tampered copy of init.ps1 fails the comparison" ($manifest.ContainsKey("init.ps1") -and $th -ne $manifest["init.ps1"])
+
+# S9: new-project bootstrap, offline via -LocalBundle (copied away from any identity.json)
+Write-Host "CHECK S9 new-project bootstrap (offline)"
+$bsRepo = Join-Path $repo "skills\new-project\bootstrap.ps1"
+$bsBin = Join-Path $smoke "s9-bin"
+New-Item -ItemType Directory -Force -Path $bsBin | Out-Null
+Copy-Item -LiteralPath $bsRepo -Destination (Join-Path $bsBin "bootstrap.ps1")
+$bs = Join-Path $bsBin "bootstrap.ps1"
+$mfPath = Join-Path $src "MANIFEST.sha256"
+$mh = (Get-FileHash -LiteralPath $mfPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$testEmail = "t@users.noreply.github.com"
+$idArgs = @("-GitUser", "T", "-GitEmail", $testEmail)
+
+function Get-GitBlobSha256([string]$Dir, [string]$Spec) {
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = "git"; $psi.Arguments = "show $Spec"; $psi.WorkingDirectory = $Dir
+  $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $errTask = $p.StandardError.ReadToEndAsync()
+  $ms = New-Object System.IO.MemoryStream
+  $p.StandardOutput.BaseStream.CopyTo($ms); $p.WaitForExit(); $null = $errTask.Result
+  if ($p.ExitCode -ne 0) { return $null }
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  return ([System.BitConverter]::ToString($sha.ComputeHash($ms.ToArray()))).Replace("-", "").ToLowerInvariant()
+}
+
+function Invoke-Bootstrap([string]$Name, [string[]]$Extra, [string]$Bundle = $src) {
+  $dir = Join-Path $smoke "s9-$Name"
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  Push-Location $dir
+  $a = @("-ProjectName", "s9-demo", "-Type", "Skill", "-Execution", "local", "-LocalBundle", $Bundle) + $Extra
+  $rc = Invoke-Script "powershell" $bs $a
+  Pop-Location
+  return $rc
+}
+
+function Test-EmptyDir([string]$Name) {
+  return (@(Get-ChildItem -LiteralPath (Join-Path $smoke "s9-$Name") -Force).Count -eq 0)
+}
+
+# a. non-empty directory
+$da = Join-Path $smoke "s9-a"
+Write-Text (Join-Path $da "x.txt") "x`n"
+$before = Get-Snapshot $da
+$rc = Invoke-Bootstrap "a" (@("-Ref", "v9.9.9", "-ManifestSha256", $mh) + $idArgs)
+Assert "S9" "a. non-empty dir -> exit 2 (got $rc)" ($rc -eq 2)
+Assert "S9" "a. nothing created" (@(Compare-Object @($before) @(Get-Snapshot $da)).Count -eq 0)
+
+# b. floating ref
+$rc = Invoke-Bootstrap "b" (@("-Ref", "main", "-ManifestSha256", $mh) + $idArgs)
+Assert "S9" "b. -Ref main -> exit 6 (got $rc)" ($rc -eq 6)
+Assert "S9" "b. nothing created" (Test-EmptyDir "b")
+
+# c. no identity
+$rc = Invoke-Bootstrap "c" @("-Ref", "v9.9.9", "-ManifestSha256", $mh)
+Assert "S9" "c. no identity -> exit 4 (got $rc)" ($rc -eq 4)
+Assert "S9" "c. nothing created" (Test-EmptyDir "c")
+
+# d. wrong manifest pin
+$rc = Invoke-Bootstrap "d" (@("-Ref", "v9.9.9", "-ManifestSha256", ("0" * 64)) + $idArgs)
+Assert "S9" "d. wrong -ManifestSha256 -> exit 5 (got $rc)" ($rc -eq 5)
+Assert "S9" "d. no tools/ left" (-not (Test-Path -LiteralPath (Join-Path $smoke "s9-d\tools")))
+
+# e. one byte changed in a bundle file, manifest unchanged
+$be = Join-Path $smoke "s9-bundle-e"
+Copy-Item -LiteralPath $src -Destination $be -Recurse
+$tf = Join-Path $be "templates\gitignore.base.tpl"
+$tb = [System.IO.File]::ReadAllBytes($tf); $tb[0] = $tb[0] -bxor 1; [System.IO.File]::WriteAllBytes($tf, $tb)
+$rc = Invoke-Bootstrap "e" (@("-Ref", "v9.9.9", "-ManifestSha256", $mh) + $idArgs) $be
+Assert "S9" "e. tampered bundle file -> exit 5 (got $rc)" ($rc -eq 5)
+Assert "S9" "e. no tools/ left" (-not (Test-Path -LiteralPath (Join-Path $smoke "s9-e\tools")))
+
+# f. manifest line with a parent-directory path (pin matches the bad manifest, so the parser must catch it)
+$bf = Join-Path $smoke "s9-bundle-f"
+Copy-Item -LiteralPath $src -Destination $bf -Recurse
+$bfm = Join-Path $bf "MANIFEST.sha256"
+Write-Text $bfm ([System.IO.File]::ReadAllText($mfPath) + ("0" * 64) + " ../x`n")
+$mhf = (Get-FileHash -LiteralPath $bfm -Algorithm SHA256).Hash.ToLowerInvariant()
+$rc = Invoke-Bootstrap "f" (@("-Ref", "v9.9.9", "-ManifestSha256", $mhf) + $idArgs) $bf
+Assert "S9" "f. manifest path ../x -> exit 5 (got $rc)" ($rc -eq 5)
+Assert "S9" "f. no tools/ left" (-not (Test-Path -LiteralPath (Join-Path $smoke "s9-f\tools")))
+
+# g. happy path
+$dg = Join-Path $smoke "s9-g"
+$rc = Invoke-Bootstrap "g" (@("-Ref", "v9.9.9", "-ManifestSha256", $mh) + $idArgs)
+Assert "S9" "g. happy path -> exit 0 (got $rc)" ($rc -eq 0)
+$n = & git -C $dg rev-list --count HEAD
+Assert "S9" "g. exactly one commit (got $n)" ("$n".Trim() -eq "1")
+$srcFile = Join-Path $dg "tools\SOURCE"
+Assert "S9" "g. tools/SOURCE has ref=v9.9.9" ((Test-Path -LiteralPath $srcFile) -and ([System.IO.File]::ReadAllText($srcFile).Split("`n") -contains "ref=v9.9.9"))
+$mm = 0
+foreach ($rel in $manifest.Keys) { if ((Get-GitBlobSha256 $dg "HEAD:tools/$rel") -ne $manifest[$rel]) { $mm++; Write-Host "  committed bytes differ: tools/$rel" } }
+Assert "S9" "g. every manifest hash equals git show HEAD:tools/<path> ($($manifest.Count) files, $mm mismatches)" ($manifest.Count -gt 0 -and $mm -eq 0)
+Assert "S9" "g. check-ignore .env" (Test-GitIgnored $dg ".env")
+$ae = & git -C $dg log -1 --format=%ae
+Assert "S9" "g. author email is the test email" ("$ae".Trim() -eq $testEmail)
+$st = & git -C $dg status --porcelain
+Assert "S9" "g. status clean" ([string]::IsNullOrEmpty(($st -join "")))
+
+# h. static checks on the repo copy of bootstrap.ps1
+$bsText = [System.IO.File]::ReadAllText($bsRepo)
+foreach ($bad in @("Invoke-Expression", "git push", "gh ")) { Assert "S9" "h. bootstrap.ps1 has no '$bad'" (-not $bsText.Contains($bad)) }
+$pinM = [regex]::Match($bsText, '(?m)^\$DefaultManifestSha256 = ''([^'']*)''')
+Assert "S9" "h. DefaultManifestSha256 equals sha256 of src/MANIFEST.sha256" ($pinM.Success -and $pinM.Groups[1].Value -eq $mh)
+$refM = [regex]::Match($bsText, '(?m)^\$DefaultRef = ''([^'']*)''')
+$wantRef = "v" + ([System.IO.File]::ReadAllText((Join-Path $src "VERSION"))).Trim()
+Assert "S9" "h. DefaultRef equals $wantRef" ($refM.Success -and $refM.Groups[1].Value -eq $wantRef)
 
 # S4: no internal project names or key narrative in tracked (or to-be-tracked) repo files
 Write-Host "CHECK S4 repo text hygiene"

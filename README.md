@@ -35,6 +35,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\init.ps1 -ProjectNam
 `init.ps1` refuses rather than overwrites and never pushes. Exit codes: 0 ok, 2 precondition
 refused, 3 template missing, 4 git identity missing.
 
+## Install the new-project skill
+
+The `new-project` skill lets a local Claude Code session on Windows bootstrap a project in an
+empty directory from the pinned release. Install it from a checkout of this repo, then put your
+git name and GitHub noreply email into `identity.json` (it stays on your machine, never in a repo):
+
+```powershell
+Copy-Item -Recurse -Force .\skills\new-project "$env:USERPROFILE\.claude\skills\"
+Copy-Item "$env:USERPROFILE\.claude\skills\new-project\identity.example.json" "$env:USERPROFILE\.claude\skills\new-project\identity.json"
+notepad "$env:USERPROFILE\.claude\skills\new-project\identity.json"
+```
+
 ## Smoke test
 
 ```powershell

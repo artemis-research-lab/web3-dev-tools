@@ -17,6 +17,11 @@
 - D14 - Run-time-only skill package - 2026-10-17 - A skill package contains only what the skill needs at run time and is platform-neutral: `SKILL.md`, `scripts/` and `lib/` (`*.py`), and optionally `references/`, `data/`, `config/` with data-type files; `CLAUDE.md`, `requirements.txt`, `pytest.ini`, `tests/`, `docs/`, `tools/`, `handoff_specs/`, `.scratch/`, `.claude/` never ship.
 - D15 - Allowlist plus hard deny list - 2026-10-17 - The packer applies the allowlist first, then a hard deny list that holds even inside allowed directories (`.env*`, `*.key`, `*.pem`, names containing `secret` or `credential`, `*.pyc`, `__pycache__`, `.git*`); the shipped file list is printed on every run and the build fails if a denied name would ship.
 - D16 - Run-time facts outside CLAUDE.md - 2026-10-17 - Run-time constraints, data caveats and output contracts of a skill live in `SKILL.md` or `references/`, never in `CLAUDE.md`; skill code and `SKILL.md` run instructions are OS-neutral (no PowerShell; `pathlib`; interpreter named as "python3, or python on Windows").
+- D17 - new-project is a local skill - 2026-10-17 - `skills/new-project` is a Claude Code LOCAL skill (Windows PowerShell 5.1). It is not a packaged skill: it never goes through `deploy.ps1`, D14 does not apply to it, and it lives outside `src/`, so it is not in the manifest.
+- D18 - Logic in bootstrap.ps1 - 2026-10-17 - All logic is in `bootstrap.ps1`; `SKILL.md` only tells Claude Code when to call it and forbids workarounds. Claude Code must not download or copy tool files by hand.
+- D19 - Bootstrap trust chain - 2026-10-17 - A pinned tag (`vX.Y.Z` only, floating refs refused) plus `MANIFEST.sha256`, per-file SHA-256, and a manifest hash pinned inside `bootstrap.ps1` (`$DefaultManifestSha256`, rewritten by `scripts/release.ps1`). Tags are mutable, so the pinned manifest hash is what detects a moved tag.
+- D20 - Git identity outside the repo - 2026-10-17 - Git identity is never stored in the repo. `bootstrap.ps1` reads `identity.json` next to itself (installed by the user, never committed) or `-GitUser`/`-GitEmail`, and passes both to `init.ps1`. Missing identity exits 4.
+- D1 clarification - 2026-10-17 - The repo's own `owner/repo` slug may appear in `bootstrap.ps1`; secrets, emails and noreply ids may not.
 
 ## Validation records
 
