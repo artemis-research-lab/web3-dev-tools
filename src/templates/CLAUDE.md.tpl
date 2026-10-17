@@ -29,7 +29,7 @@ All temporary files go under `.scratch/{probe,build,logs,misc}/` inside this rep
 Read `docs/architecture.md` first, in every session. `docs/` files are English. architecture.md holds Purpose, Modules (Responsibility / Input / Output / Depends on), Known Limits, Coding Notes only: no implementation details.
 
 ## Skill packaging
-A skill package ships only run-time components: `SKILL.md`, `scripts/` and `lib/` (`*.py`), and optionally `references/`, `data/`, `config/` data files. This file, `requirements.txt`, `pytest.ini`, `tests/`, `docs/`, `tools/`, `handoff_specs/`, `.scratch/` and `.claude/` never ship.
+A skill package ships only run-time components: `SKILL.md`, `scripts/` and `lib/` (`*.py`), and optionally `references/`, `data/`, `config/` data files and `assets/ (.css .html .tmpl .svg)`. This file, `requirements.txt`, `pytest.ini`, `tests/`, `docs/`, `tools/`, `handoff_specs/`, `.scratch/` and `.claude/` never ship.
 Run-time constraints, data caveats and output contracts go in `SKILL.md` or `references/`, never here. Skill code and `SKILL.md` run instructions stay OS-neutral (`pathlib`, "python3, or python on Windows").
 
 ## PROJECT LAYOUT

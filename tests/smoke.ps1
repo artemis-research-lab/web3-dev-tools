@@ -224,6 +224,29 @@ foreach ($d in $decoys8) {
   Assert "S8" "output lists DENIED $dz" (@($out | Where-Object { $_.Trim() -eq "DENIED $dz" }).Count -eq 1)
 }
 
+# S10: assets/ ships .css .html .tmpl .svg (recursive); other extensions skipped; deny list still applies
+Write-Host "CHECK S10 packer: assets/"
+$fx10 = Join-Path $smoke "pack-fixture-s10"
+$assets10 = @("assets\report.html.tmpl", "assets\lism-main.css", "assets\logo.svg", "assets\sub\print.css")
+$ship10 = $ship + $assets10
+Write-Text (Join-Path $fx10 "SKILL.md") "---`nname: pack-fixture-s10`ndescription: smoke fixture`n---`n"
+foreach ($s in $ship10) { if ($s -ne "SKILL.md") { Write-Text (Join-Path $fx10 $s) "x`n" } }
+$skip10 = @("assets\app.js", "assets\font.woff2")
+$denied10 = @("assets\.env", "assets\api_key.css")
+foreach ($d in ($decoys + $skip10 + $denied10)) { Write-Text (Join-Path $fx10 $d) "DECOY`n" }
+Copy-Item -LiteralPath (Join-Path $src "deploy.ps1") -Destination (Join-Path $fx10 "tools\deploy.ps1")
+$out = Invoke-Packer $fx10
+Assert "S10" "deploy.ps1 -ClaudeAi exit 0 (got $script:packerRc)" ($script:packerRc -eq 0)
+Assert "S10" "zip self-verification passed" (@($out | Where-Object { $_.Trim() -like "OK verified *" }).Count -eq 1)
+$names = Test-ZipExact "S10" (Join-Path $fx10 "dist\pack-fixture-s10.zip") ($ship10 | ForEach-Object { $_.Replace('\', '/') })
+foreach ($a in $assets10) { $az = $a.Replace('\', '/'); Assert "S10" "ships $az" ($names -contains $az) }
+foreach ($d in $skip10) { $dz = $d.Replace('\', '/'); Assert "S10" "excludes $dz" (-not ($names -contains $dz)) }
+foreach ($d in $denied10) {
+  $dz = $d.Replace('\', '/')
+  Assert "S10" "excludes denied $dz" (-not ($names -contains $dz))
+  Assert "S10" "output lists DENIED $dz" (@($out | Where-Object { $_.Trim() -eq "DENIED $dz" }).Count -eq 1)
+}
+
 # check 5: manifest
 Write-Host "CHECK 5 manifest"
 $rc = Invoke-Script "powershell" (Join-Path $repo "scripts\release.ps1") @()

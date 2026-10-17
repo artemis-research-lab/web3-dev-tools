@@ -30,8 +30,8 @@ param(
   [string]$GitUser, [string]$GitEmail,
   [string]$LocalBundle          # test hook: path to a src/ directory used instead of the network
 )
-$DefaultRef = 'v0.2.1'
-$DefaultManifestSha256 = '0ea758f307eacedc957e90908bfb3db63d14015c64c9bb6de2fa374cd02e03b7'
+$DefaultRef = 'v0.3.0'
+$DefaultManifestSha256 = '0c9afc088ebaec4ce103f8701b383d6957a859c9df09d8cd7e95d9721817ea5a'
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"

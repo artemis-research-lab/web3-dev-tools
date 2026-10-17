@@ -329,9 +329,6 @@ Pop-Location
 if ($commitExit -ne 0) { throw "git commit failed (exit $commitExit)" }
 
 Write-Host ""
-Write-Host "DONE. Next steps:" -ForegroundColor Green
-Write-Host "  1. Open the 'Web3 Dev' Claude.ai project, start a NEW chat."
-Write-Host "  2. Give a one-paragraph pitch, say 'start dev session'."
-Write-Host "  3. Probe (gen probe spec -> CC session 1) as needed, then gen project spec."
+Write-Host "DONE. Next: create an empty GitHub repository, add it as origin, push main." -ForegroundColor Green
 Write-Host "  Project root: $proj"
 exit 0

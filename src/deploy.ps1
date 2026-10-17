@@ -18,6 +18,7 @@ $ALLOW_DIRS  = [ordered]@{
   'references' = @('.md', '.txt', '.json')
   'data'       = @('.json', '.csv', '.txt')
   'config'     = @('.json')
+  'assets'     = @('.css', '.html', '.tmpl', '.svg')
 }
 # hard deny list: applies to every path segment, even inside allowed directories
 $DENY = @('.env*','*.key','*.pem','*secret*','*credential*','*.pyc','__pycache__','.git*','*apikey*','*api_key*','*api-key*','*password*','*passwd*','*private_key*','*privatekey*','*mnemonic*','*keystore*','*access_token*','*auth_token*','*.p12','*.pfx','id_rsa*')
