@@ -11,8 +11,9 @@
   those are produced by the project/module handoff specs (gen project spec / gen module spec).
 
   Generic config (settings.json, pytest.ini, requirements.txt) is written byte-for-byte from the
-  amm-position-manager-validated templates. CLAUDE.md/.gitignore/.gitattributes/docs come from
-  templates\*.tpl; only {{PROJECT_NAME}}, {{EXECUTION}} and {{DATE}} are replaced.
+  previously validated templates. CLAUDE.md/.gitignore/.gitattributes/docs come from
+  templates\*.tpl; only {{PROJECT_NAME}}, {{EXECUTION}} and {{DATE}} are replaced, plus
+  {{SHELL_SECTION}} in CLAUDE.md.tpl (from claude-shell.<Execution>.tpl).
 
   tools/deploy.ps1 packer: ALLOWLIST model, shipped as deploy.ps1 next to this script. It is copied,
   never embedded; an existing tools\deploy.ps1 (InPlace mode) is left unchanged.
@@ -109,7 +110,7 @@ if ($InPlace) {
 }
 
 $tplDir = Join-Path $PSScriptRoot "templates"
-$tplNames = @("CLAUDE.md.tpl", "gitignore.base.tpl", "gitattributes.tpl", "architecture.md.tpl", "decisions.md.tpl")
+$tplNames = @("CLAUDE.md.tpl", "claude-shell.local.tpl", "claude-shell.cloud.tpl", "gitignore.base.tpl", "gitattributes.tpl", "architecture.md.tpl", "decisions.md.tpl")
 if ($Clasp) { $tplNames += "claspignore.tpl" }
 foreach ($t in $tplNames) {
   if (-not (Test-Path -LiteralPath (Join-Path $tplDir $t))) {
@@ -142,6 +143,12 @@ if ($GitUser -or $GitEmail) {
 $today = (Get-Date).ToString("yyyy-MM-dd")
 function Get-Rendered([string]$Name) {
   $t = [System.IO.File]::ReadAllText((Join-Path $tplDir $Name))
+  if ($Name -eq "CLAUDE.md.tpl") {
+    $shell = [System.IO.File]::ReadAllText((Join-Path $tplDir "claude-shell.$Execution.tpl"))
+    if ($shell.EndsWith("`r`n")) { $shell = $shell.Substring(0, $shell.Length - 2) }
+    elseif ($shell.EndsWith("`n")) { $shell = $shell.Substring(0, $shell.Length - 1) }
+    $t = $t.Replace("{{SHELL_SECTION}}", $shell)
+  }
   return $t.Replace("{{PROJECT_NAME}}", $ProjectName).Replace("{{EXECUTION}}", $Execution).Replace("{{DATE}}", $today)
 }
 
@@ -190,7 +197,7 @@ if ($Clasp) { Write-Utf8NoBom (Join-Path $proj ".claspignore") (Get-Rendered "cl
 # ---------------------------------------------------------------------------
 if ($Type -eq "Skill") {
   # Skill: Python stdlib, pytest dev-only, zip deploy
-  $skillDirs = @("lib", "lib\clients", "scripts", "tests\unit", "tests\acceptance")
+  $skillDirs = @("lib", "lib\clients", "scripts", "references", "tests\unit", "tests\acceptance")
   foreach ($d in $skillDirs) { New-Item -ItemType Directory -Force -Path (Join-Path $proj $d) | Out-Null }
 
   # package markers (only these two, per recon; tests dirs have none)
@@ -219,8 +226,20 @@ description: >
 
 # $ProjectName
 
-TODO: filled by the project handoff spec.
+Run: python3 scripts/<entry>.py ... (use python on Windows if python3 is not available).
+See references/runtime.md for run-time constraints and the output contract.
 "@
+
+  # references/runtime.md -- run-time facts ship with the skill (CLAUDE.md is dev-only and never ships)
+  Write-Utf8NoBom (Join-Path $proj "references\runtime.md") @'
+# Runtime notes
+Run-time constraints, data caveats and the output contract of this skill. This file ships with the skill.
+Keep it platform-neutral: no PowerShell, no Windows paths. Developer-session rules belong in CLAUDE.md, which does not ship.
+
+## Constraints
+## Data sources and caveats
+## Output contract
+'@
 
   # tools/deploy.ps1 -- Python-zipfile ALLOWLIST packer (DEFINITIVE: never Compress-Archive).
   # Copied from this bundle; an existing tools\deploy.ps1 (InPlace) is left unchanged.

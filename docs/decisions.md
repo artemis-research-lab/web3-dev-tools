@@ -11,6 +11,12 @@
 - D8 - v2.0 compatibility - 2026-10-17 - `init.ps1` keeps v2.0 behaviour byte-for-byte for the generic Skill/MCP files unless a later decision changes it.
 - D9 - No BOM - 2026-10-17 - Text files are written with .NET UTF-8 without BOM (`System.Text.UTF8Encoding($false)`), never `Out-File`/`Set-Content -Encoding utf8`, and `Invoke-WebRequest` always gets `-UseBasicParsing`, because 5.1 writes a BOM and needs basic parsing.
 - D10 - Allowlist packer - 2026-10-17 - The canonical packer is the allowlist packer from `init.ps1` v2.0, shipped as `src/deploy.ps1`; the older blocklist packer is rejected because a previous skill zip leaked `.env`.
+- D11 - Execution-specific shell section - 2026-10-17 - The CLAUDE.md shell section depends on the execution mode: `-Execution local` gets the PowerShell rules, `-Execution cloud` gets Bash rules; the rest of CLAUDE.md is shared.
+- D12 - Keep tools bytes - 2026-10-17 - Scaffolded projects keep `tools/**` byte-for-byte (`-text`), so the bundle manifest stays verifiable after a clone.
+- D13 - Neutral comments - 2026-10-17 - Comments in the public bundle name no internal project and state no incident details beyond "an earlier blocklist design failed in practice".
+- D14 - Run-time-only skill package - 2026-10-17 - A skill package contains only what the skill needs at run time and is platform-neutral: `SKILL.md`, `scripts/` and `lib/` (`*.py`), and optionally `references/`, `data/`, `config/` with data-type files; `CLAUDE.md`, `requirements.txt`, `pytest.ini`, `tests/`, `docs/`, `tools/`, `handoff_specs/`, `.scratch/`, `.claude/` never ship.
+- D15 - Allowlist plus hard deny list - 2026-10-17 - The packer applies the allowlist first, then a hard deny list that holds even inside allowed directories (`.env*`, `*.key`, `*.pem`, names containing `secret` or `credential`, `*.pyc`, `__pycache__`, `.git*`); the shipped file list is printed on every run and the build fails if a denied name would ship.
+- D16 - Run-time facts outside CLAUDE.md - 2026-10-17 - Run-time constraints, data caveats and output contracts of a skill live in `SKILL.md` or `references/`, never in `CLAUDE.md`; skill code and `SKILL.md` run instructions are OS-neutral (no PowerShell; `pathlib`; interpreter named as "python3, or python on Windows").
 
 ## Validation records
 

@@ -6,31 +6,49 @@ $name = Split-Path -Leaf $repo
 $skillDst = Join-Path $env:USERPROFILE ".claude\skills\$name"
 $distZip  = Join-Path $repo "dist\$name.zip"
 
-# ALLOWLIST -- only these ship, in either output, regardless of what else exists
-# in the repo (.env, .claude/, tests/, handoff_specs/, pytest.ini, .git*, etc.
-# never ship because they are never listed here -- not because something else
-# blocks them). Fixed 2026-09 after amm-pool-monitor's .env leak (the old
-# $EXCLUDE blocklist required remembering to add every new sensitive file
-# type, and that failed in practice -- a live .env with API keys shipped in
-# both the synced skill folder and the distributable zip). Adding a new
-# shippable file type is now a deliberate decision: add it to $ALLOW_FILES
-# or $ALLOW_DIRS explicitly, don't rely on nothing else catching it.
-$ALLOW_FILES = @('SKILL.md', 'CLAUDE.md', 'requirements.txt')
-$ALLOW_DIRS  = @('scripts', 'lib')   # every *.py file within these, recursively
+# ALLOWLIST -- only these ship, in either output, regardless of what else exists in the repo
+# (.env, .claude/, tests/, docs/, tools/, handoff_specs/, .scratch/, pytest.ini, .git*, etc. never ship
+# because they are never listed here). An earlier blocklist design failed in practice.
+# Adding a new shippable file type is a deliberate decision: add it to $ALLOW_FILES or $ALLOW_DIRS.
+$ALLOW_FILES = @('SKILL.md')
+# directory -> shipped extensions (case-insensitive, recursive)
+$ALLOW_DIRS  = [ordered]@{
+  'scripts'    = @('.py')
+  'lib'        = @('.py')
+  'references' = @('.md', '.txt', '.json')
+  'data'       = @('.json', '.csv', '.txt')
+  'config'     = @('.json')
+}
+# hard deny list: applies to every path segment, even inside allowed directories
+$DENY = @('.env*', '*.key', '*.pem', '*secret*', '*credential*', '*.pyc', '__pycache__', '.git*')
+
+function Test-Denied([string]$rel) {
+  foreach ($seg in ($rel -split '[\\/]')) {
+    foreach ($pat in $DENY) { if ($seg -like $pat) { return $true } }
+  }
+  return $false
+}
 
 function Get-ShippedRelativePaths {
+  if ($null -ne $script:Shipped) { return $script:Shipped }
   $paths = @()
   foreach ($f in $ALLOW_FILES) {
-    if (Test-Path (Join-Path $repo $f)) { $paths += $f }
+    if (Test-Path (Join-Path $repo $f)) {
+      if (Test-Denied $f) { Write-Host "DENIED $f" } else { $paths += $f }
+    }
   }
-  foreach ($d in $ALLOW_DIRS) {
+  foreach ($d in $ALLOW_DIRS.Keys) {
     $full = Join-Path $repo $d
     if (Test-Path $full) {
-      Get-ChildItem -Path $full -Recurse -File -Filter "*.py" | ForEach-Object {
-        $paths += $_.FullName.Substring($repo.Length).TrimStart('\','/')
+      Get-ChildItem -Path $full -Recurse -File -Force | ForEach-Object {
+        $rel = $_.FullName.Substring($repo.Length).TrimStart('\','/')
+        if (Test-Denied $rel) { Write-Host "DENIED $($rel.Replace('\','/'))" }
+        elseif ($ALLOW_DIRS[$d] -contains $_.Extension.ToLowerInvariant()) { $paths += $rel }
       }
     }
   }
+  foreach ($rel in $paths) { Write-Host "SHIP $($rel.Replace('\','/'))" }
+  $script:Shipped = $paths
   return $paths
 }
 
@@ -66,7 +84,23 @@ print('OK packed', out)
 "@
   $py | python -
   if ($LASTEXITCODE -ne 0) { throw "python zip pack failed" }
-  python -c "import zipfile; n=zipfile.ZipFile(r'$distZip').namelist(); assert all('\\' not in x for x in n), 'BACKSLASH'; assert any(x.endswith('SKILL.md') for x in n), 'NO SKILL.md'; print('OK verified', len(n), 'entries')"
+  $denyJoined = $DENY -join "','"
+  $verify = @"
+import zipfile, fnmatch
+n = zipfile.ZipFile(r'$pyZip').namelist()
+allowed = set(['$pathsJoined'])
+deny = ['$denyJoined']
+bad = [x for x in n if '\\' in x]
+assert not bad, 'BACKSLASH: %s' % bad
+assert 'SKILL.md' in n, 'NO SKILL.md'
+denied = [x for x in n if any(fnmatch.fnmatchcase(s.lower(), p) for s in x.split('/') for p in deny)]
+assert not denied, 'DENIED ENTRY: %s' % denied
+outside = [x for x in n if x not in allowed]
+assert not outside, 'OUTSIDE ALLOWLIST: %s' % outside
+print('OK verified', len(n), 'entries')
+"@
+  $verify | python -
+  if ($LASTEXITCODE -ne 0) { throw "zip verification failed" }
 }
 
 if ($Both) { Sync-Skill; Build-Zip }

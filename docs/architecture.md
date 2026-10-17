@@ -5,7 +5,7 @@ Maintain one versioned, checksummed bundle (`src/`) of the scaffold script, Skil
 
 ## Modules
 ### Scaffold
-- Responsibility: Create a new Skill or MCP project tree, rendered from the templates, in local or cloud execution mode, and make its first commit.
+- Responsibility: Create a new Skill or MCP project tree, rendered from the templates, in local or cloud execution mode, and make its first commit. The CLAUDE.md shell section is execution-specific: PowerShell rules for local, Bash rules for cloud.
 - Input: Project name, type, execution mode, target (parent directory or current directory) and optional repo-local git identity.
 - Output: A scaffolded git repository with one commit, or a refusal exit code with nothing written.
 - Depends on: Packer.
