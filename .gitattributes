@@ -1,0 +1,8 @@
+* text=auto
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+# src/ is the checksummed release bundle: store and serve its bytes unchanged so
+# raw.githubusercontent.com downloads match src/MANIFEST.sha256.
+src/** -text
